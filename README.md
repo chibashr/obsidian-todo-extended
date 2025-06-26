@@ -92,10 +92,6 @@ The plugin recognizes standard Markdown checkbox format, including hierarchical 
 - [ ] Todo with both due:2024-01-15 !medium
 - [ ] Todo with tags #work #urgent
 
-# Linked notes (shows as "Milton-Freewater - Possible STP issues" with → button)
-- [ ] Review [[Milton-Freewater - Possible STP issues]]
-- [ ] Check [[Network Documentation|network docs]] for details
-
 # Image support (images display in sidebar, can be collapsed/expanded)
 - [ ] Review network diagram ![Network Diagram](path/to/diagram.png)
 - [ ] Check server photos ![[server-room-photo.jpg]]
