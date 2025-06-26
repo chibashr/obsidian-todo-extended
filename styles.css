@@ -1,0 +1,581 @@
+/* Todo Extended Plugin Styles */
+
+.todo-extended-view {
+	padding: 16px;
+	height: 100%;
+	overflow-y: auto;
+}
+
+.todo-extended-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 16px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding-bottom: 8px;
+}
+
+.todo-extended-header h3 {
+	margin: 0;
+	color: var(--text-normal);
+}
+
+.todo-refresh-btn {
+	background: var(--interactive-normal);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 4px 8px;
+	cursor: pointer;
+	color: var(--text-normal);
+	font-size: 14px;
+}
+
+.todo-refresh-btn:hover {
+	background: var(--interactive-hover);
+}
+
+.todo-loading {
+	text-align: center;
+	padding: 32px;
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.todo-empty {
+	text-align: center;
+	padding: 32px;
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.todos-container {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.todo-group {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.todo-group-header {
+	background: var(--background-secondary);
+	padding: 8px 12px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.todo-group-header h4 {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.todo-count {
+	font-size: 12px;
+	color: var(--text-muted);
+	background: var(--background-modifier-border);
+	padding: 2px 6px;
+	border-radius: 10px;
+}
+
+.todo-list {
+	display: flex;
+	flex-direction: column;
+}
+
+.todo-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	padding: 4px 8px;
+	border-bottom: 1px solid var(--background-modifier-border-focus);
+	transition: background-color 0.2s ease;
+	min-height: 36px;
+	position: relative; /* For absolute positioning of link icons */
+}
+
+.todo-item:last-child {
+	border-bottom: none;
+}
+
+.todo-item:hover {
+	background: var(--background-secondary-alt);
+}
+
+.todo-item.todo-completed {
+	opacity: 0.6;
+}
+
+.todo-item.todo-completed .todo-text {
+	text-decoration: line-through;
+}
+
+.todo-item.todo-child {
+	margin-left: 16px;
+	border-left: 2px solid var(--background-modifier-border);
+	padding-left: 6px;
+}
+
+.todo-item.todo-child-level-2 {
+	margin-left: 32px;
+}
+
+.todo-item.todo-child-level-3 {
+	margin-left: 48px;
+}
+
+.todo-checkbox {
+	margin-top: 1px;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.todo-content {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.todo-text {
+	font-size: 13px;
+	line-height: 1.3;
+	color: var(--text-normal);
+	cursor: pointer;
+	word-wrap: break-word;
+	margin: 0;
+}
+
+.todo-text:hover {
+	color: var(--text-accent);
+}
+
+.todo-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+	font-size: 11px;
+}
+
+.todo-file {
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 1px 3px;
+	border-radius: 2px;
+	background: var(--background-modifier-border-focus);
+	font-size: 10px;
+}
+
+.todo-file:hover {
+	background: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.todo-file {
+	color: var(--text-muted);
+	cursor: pointer;
+	padding: 1px 3px;
+	border-radius: 2px;
+	background: var(--background-modifier-border-focus);
+	font-size: 10px;
+}
+
+.todo-file:hover {
+	background: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.todo-due-date {
+	padding: 1px 4px;
+	border-radius: 2px;
+	font-weight: 500;
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: 10px;
+}
+
+.todo-due-date.todo-today {
+	background: var(--color-yellow);
+	color: var(--text-on-accent);
+}
+
+.todo-due-date.todo-overdue {
+	background: var(--color-red);
+	color: var(--text-on-accent);
+}
+
+.todo-tags {
+	display: flex;
+	gap: 4px;
+	flex-wrap: wrap;
+}
+
+.todo-tag {
+	background: var(--tag-background);
+	color: var(--tag-color);
+	padding: 2px 6px;
+	border-radius: 3px;
+	font-size: 11px;
+	font-weight: 500;
+}
+
+/* Priority styles */
+.todo-priority {
+	padding: 1px 4px;
+	border-radius: 2px;
+	font-size: 9px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.todo-priority-high {
+	background: var(--color-red);
+	color: var(--text-on-accent);
+}
+
+.todo-priority-medium {
+	background: var(--color-orange);
+	color: var(--text-on-accent);
+}
+
+.todo-priority-low {
+	background: var(--color-green);
+	color: var(--text-on-accent);
+}
+
+/* Inline editing styles */
+.todo-priority-selector {
+	font-size: 10px;
+	padding: 1px 3px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 2px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	margin-left: 2px;
+	height: 18px;
+}
+
+.todo-priority-selector:hover {
+	border-color: var(--background-modifier-border-hover);
+}
+
+.todo-priority-selector:focus {
+	outline: none;
+	border-color: var(--color-accent);
+}
+
+.todo-no-date {
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.clickable-date {
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.clickable-date:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* Linked notes styles */
+.todo-linked-notes {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	display: flex;
+	gap: 4px;
+	flex-wrap: wrap;
+}
+
+.todo-link-icon {
+	background: none;
+	border: none;
+	padding: 2px;
+	font-size: 12px;
+	cursor: pointer;
+	color: var(--text-accent);
+	opacity: 0.7;
+	transition: all 0.2s ease;
+	border-radius: 3px;
+}
+
+.todo-link-icon:hover {
+	opacity: 1;
+	background: var(--background-modifier-hover);
+}
+
+/* Date picker popup styles */
+.todo-date-picker {
+	background: var(--background-primary);
+	border: 2px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 12px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	min-width: 200px;
+}
+
+.date-picker-input {
+	width: 100%;
+	padding: 6px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	margin-bottom: 8px;
+	font-size: 12px;
+}
+
+.date-picker-input:focus {
+	outline: none;
+	border-color: var(--color-accent);
+}
+
+.date-picker-error {
+	color: var(--color-red);
+	font-size: 11px;
+	margin-bottom: 8px;
+	padding: 4px;
+	background: var(--background-modifier-error);
+	border-radius: 3px;
+	text-align: center;
+}
+
+.date-picker-buttons {
+	display: flex;
+	gap: 6px;
+	justify-content: flex-end;
+}
+
+.date-picker-save,
+.date-picker-clear,
+.date-picker-cancel {
+	padding: 4px 8px;
+	border: none;
+	border-radius: 4px;
+	font-size: 11px;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.date-picker-save {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.date-picker-save:hover {
+	background: var(--interactive-accent-hover);
+}
+
+.date-picker-clear {
+	background: var(--color-orange);
+	color: var(--text-on-accent);
+}
+
+.date-picker-clear:hover {
+	background: var(--color-orange);
+	opacity: 0.8;
+}
+
+.date-picker-cancel {
+	background: var(--background-secondary);
+	color: var(--text-normal);
+}
+
+.date-picker-cancel:hover {
+	background: var(--background-secondary-alt);
+}
+
+/* Settings interface styles */
+.grouping-criteria-container {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 12px;
+	margin: 8px 0;
+}
+
+.add-criterion-btn {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: 4px;
+	padding: 6px 12px;
+	cursor: pointer;
+	margin-bottom: 12px;
+	font-size: 12px;
+}
+
+.add-criterion-btn:hover {
+	background: var(--interactive-accent-hover);
+}
+
+.criteria-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.grouping-criterion {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	cursor: move;
+}
+
+.grouping-criterion:hover {
+	background: var(--background-secondary-alt);
+}
+
+.drag-handle {
+	color: var(--text-muted);
+	cursor: grab;
+	font-size: 14px;
+	line-height: 1;
+}
+
+.drag-handle:active {
+	cursor: grabbing;
+}
+
+.criterion-toggle {
+	margin: 0;
+}
+
+.criterion-type,
+.criterion-property {
+	font-size: 12px;
+	padding: 4px 6px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 3px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+}
+
+.criterion-property {
+	flex: 1;
+}
+
+.remove-criterion-btn {
+	background: var(--color-red);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: 3px;
+	padding: 4px 8px;
+	cursor: pointer;
+	font-size: 12px;
+	font-weight: bold;
+}
+
+.remove-criterion-btn:hover {
+	background: var(--color-red);
+	opacity: 0.8;
+}
+
+/* Dark theme adjustments */
+.theme-dark .todo-extended-view {
+	color: var(--text-normal);
+}
+
+.theme-dark .todo-refresh-btn {
+	background: var(--background-secondary);
+}
+
+.theme-dark .todo-group {
+	border-color: var(--background-modifier-border);
+}
+
+.theme-dark .todo-group-header {
+	background: var(--background-secondary);
+}
+
+/* Image Support Styles */
+.todo-images {
+	margin-top: 4px;
+}
+
+.todo-images-toggle {
+	background: var(--background-modifier-border-focus);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 3px;
+	padding: 2px 6px;
+	font-size: 10px;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.todo-images-toggle:hover {
+	background: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.todo-images-container {
+	margin-top: 4px;
+	display: none;
+	gap: 4px;
+	flex-wrap: wrap;
+}
+
+.todo-images-container.todo-images-expanded {
+	display: flex;
+}
+
+.todo-image {
+	max-width: 100px;
+	max-height: 100px;
+	object-fit: cover;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	transition: transform 0.2s ease;
+}
+
+.todo-image:hover {
+	transform: scale(1.05);
+	border-color: var(--background-modifier-border-hover);
+}
+
+/* When images are not collapsed, display them directly */
+.todo-images:not(.todo-images-collapsed) .todo-image {
+	max-width: 80px;
+	max-height: 80px;
+	margin: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 400px) {
+	.todo-extended-view {
+		padding: 8px;
+	}
+	
+	.todo-meta {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+	
+	.todo-item {
+		padding: 6px 8px;
+	}
+
+	.todo-image {
+		max-width: 60px;
+		max-height: 60px;
+	}
+
+	.todo-images:not(.todo-images-collapsed) .todo-image {
+		max-width: 50px;
+		max-height: 50px;
+	}
+} 

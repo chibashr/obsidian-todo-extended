@@ -1,0 +1,11 @@
+{
+	"id": "obsidian-todo-extended",
+	"name": "Todo Extended",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Advanced todo management with filtering, grouping, and daily notes integration",
+	"author": "chibashr",
+	"authorUrl": "",
+	"fundingUrl": "",
+	"isDesktopOnly": false
+} 
