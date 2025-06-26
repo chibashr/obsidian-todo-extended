@@ -1,4 +1,5 @@
 # Todo Extended Plugin for Obsidian
+Vibe Code with Love
 
 An advanced todo management plugin for Obsidian that provides enhanced filtering, grouping, and daily notes integration.
 
