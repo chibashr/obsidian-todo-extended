@@ -4,7 +4,7 @@
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Advanced todo management with filtering, grouping, and daily notes integration",
-	"author": "",
+	"author": "chibashr",
 	"authorUrl": "",
 	"fundingUrl": "",
 	"isDesktopOnly": false
