@@ -139,7 +139,26 @@ export default class TodoExtendedPlugin extends Plugin {
 			});
 		}
 
-		return groups.sort((a, b) => a.name.localeCompare(b.name));
+		return groups.sort((a, b) => {
+			// Helper function to check if a group name indicates "no value"
+			const isNoValueGroup = (name: string) => {
+				const lowerName = name.toLowerCase();
+				return lowerName.includes('no ') || 
+					   lowerName.includes('none') || 
+					   lowerName === 'root' ||
+					   lowerName.includes('all todos');
+			};
+			
+			const aIsNoValue = isNoValueGroup(a.name);
+			const bIsNoValue = isNoValueGroup(b.name);
+			
+			// If one is "no value" and the other isn't, put "no value" at the bottom
+			if (aIsNoValue && !bIsNoValue) return 1;
+			if (!aIsNoValue && bIsNoValue) return -1;
+			
+			// If both are the same type (both "no value" or both normal), sort alphabetically
+			return a.name.localeCompare(b.name);
+		});
 	}
 
 	private sortTodosWithHierarchy(todos: TodoItem[]): TodoItem[] {
@@ -209,12 +228,14 @@ export default class TodoExtendedPlugin extends Plugin {
 	private extractTodosFromFile(file: TFile, content: string, cache: CachedMetadata | null): TodoItem[] {
 		const todos: TodoItem[] = [];
 		const lines = content.split('\n');
+		const parentStack: { indent: number; priority: TodoPriority }[] = [];
 
 		lines.forEach((line, index) => {
 			const todoMatch = line.match(/^(\s*)(- \[[ x]\])\s*(.*)$/);
 			if (todoMatch) {
 				const [, indent, checkbox, text] = todoMatch;
 				const isCompleted = checkbox.includes('x');
+				const indentLevel = indent.length;
 				
 				// Skip completed todos if setting is enabled
 				if (isCompleted && this.settings.hideCompletedTodos) {
@@ -226,15 +247,35 @@ export default class TodoExtendedPlugin extends Plugin {
 					return;
 				}
 
+				// Get explicit priority from this todo
+				const explicitPriority = this.extractPriority(text);
+				
+				// Clean parent stack - remove parents that are at same or deeper level
+				while (parentStack.length > 0 && parentStack[parentStack.length - 1].indent >= indentLevel) {
+					parentStack.pop();
+				}
+				
+				// Determine effective priority: explicit priority or inherit from parent
+				let effectivePriority = explicitPriority;
+				if (explicitPriority === 'none' && parentStack.length > 0) {
+					// Inherit priority from the closest parent that has one
+					for (let i = parentStack.length - 1; i >= 0; i--) {
+						if (parentStack[i].priority !== 'none') {
+							effectivePriority = parentStack[i].priority;
+							break;
+						}
+					}
+				}
+
 				const todo: TodoItem = {
 					id: `${file.path}:${index}`,
 					text: text.trim(),
 					completed: isCompleted,
 					file: file,
 					line: index,
-					indent: indent.length,
+					indent: indentLevel,
 					dueDate: this.extractDueDate(text),
-					priority: this.extractPriority(text),
+					priority: effectivePriority,
 					tags: this.extractTags(text),
 					properties: this.extractProperties(cache),
 					originalText: line,
@@ -242,6 +283,9 @@ export default class TodoExtendedPlugin extends Plugin {
 					displayText: this.createDisplayText(text),
 					images: this.extractImages(text)
 				};
+
+				// Add this todo as a potential parent for future todos
+				parentStack.push({ indent: indentLevel, priority: effectivePriority });
 
 				todos.push(todo);
 			}

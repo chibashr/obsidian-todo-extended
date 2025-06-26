@@ -41,7 +41,7 @@ All notable changes to the Todo Extended Plugin will be documented in this file.
 - Image display controls (show/hide, auto-collapse)
 - Various UI and behavior toggles
 
-## [Unreleased]
+## [1.1.0] - 2024-01-21
 
 ### Added
 - Enhanced task display: Due dates and priorities are now parsed from task names and displayed separately as metadata, keeping the task list clean and organized.
@@ -71,6 +71,15 @@ All notable changes to the Todo Extended Plugin will be documented in this file.
   - Clickable priority tags for quick editing when inline editing is enabled
   - "No Priority" selector only appears when no priority is assigned
   - Eliminates visual clutter and redundant information display
+- Hierarchical priority inheritance:
+  - Child tasks automatically inherit priority from their parent tasks
+  - If a parent task is tagged with a priority, all child tasks inherit that priority
+  - Child tasks can still have their own explicit priority which overrides inheritance
+  - Maintains logical parent-child relationship for project management
+- Improved grouping organization:
+  - Groups without specific values (e.g., "No Priority", "No Project", "Root") are now placed at the bottom
+  - Named groups appear first in alphabetical order, followed by "No [grouping]" groups
+  - Creates cleaner visual hierarchy with meaningful groups at the top
 - Inline panel-based grouping controls:
   - Full grouping functionality in a collapsible inline panel
   - Dynamic grouping criteria management with "Add" button

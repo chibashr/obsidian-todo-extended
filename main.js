@@ -1050,7 +1050,19 @@ var TodoExtendedPlugin = class extends import_obsidian3.Plugin {
         todos: sortedTodos
       });
     }
-    return groups.sort((a, b) => a.name.localeCompare(b.name));
+    return groups.sort((a, b) => {
+      const isNoValueGroup = (name) => {
+        const lowerName = name.toLowerCase();
+        return lowerName.includes("no ") || lowerName.includes("none") || lowerName === "root" || lowerName.includes("all todos");
+      };
+      const aIsNoValue = isNoValueGroup(a.name);
+      const bIsNoValue = isNoValueGroup(b.name);
+      if (aIsNoValue && !bIsNoValue)
+        return 1;
+      if (!aIsNoValue && bIsNoValue)
+        return -1;
+      return a.name.localeCompare(b.name);
+    });
   }
   sortTodosWithHierarchy(todos) {
     return todos.sort((a, b) => {
@@ -1107,16 +1119,31 @@ var TodoExtendedPlugin = class extends import_obsidian3.Plugin {
   extractTodosFromFile(file, content, cache) {
     const todos = [];
     const lines = content.split("\n");
+    const parentStack = [];
     lines.forEach((line, index) => {
       const todoMatch = line.match(/^(\s*)(- \[[ x]\])\s*(.*)$/);
       if (todoMatch) {
         const [, indent, checkbox, text] = todoMatch;
         const isCompleted = checkbox.includes("x");
+        const indentLevel = indent.length;
         if (isCompleted && this.settings.hideCompletedTodos) {
           return;
         }
         if (text.trim() === "" && this.settings.hideBlankTodos) {
           return;
+        }
+        const explicitPriority = this.extractPriority(text);
+        while (parentStack.length > 0 && parentStack[parentStack.length - 1].indent >= indentLevel) {
+          parentStack.pop();
+        }
+        let effectivePriority = explicitPriority;
+        if (explicitPriority === "none" && parentStack.length > 0) {
+          for (let i = parentStack.length - 1; i >= 0; i--) {
+            if (parentStack[i].priority !== "none") {
+              effectivePriority = parentStack[i].priority;
+              break;
+            }
+          }
         }
         const todo = {
           id: `${file.path}:${index}`,
@@ -1124,9 +1151,9 @@ var TodoExtendedPlugin = class extends import_obsidian3.Plugin {
           completed: isCompleted,
           file,
           line: index,
-          indent: indent.length,
+          indent: indentLevel,
           dueDate: this.extractDueDate(text),
-          priority: this.extractPriority(text),
+          priority: effectivePriority,
           tags: this.extractTags(text),
           properties: this.extractProperties(cache),
           originalText: line,
@@ -1134,6 +1161,7 @@ var TodoExtendedPlugin = class extends import_obsidian3.Plugin {
           displayText: this.createDisplayText(text),
           images: this.extractImages(text)
         };
+        parentStack.push({ indent: indentLevel, priority: effectivePriority });
         todos.push(todo);
       }
     });
