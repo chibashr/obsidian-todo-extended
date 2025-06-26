@@ -1,7 +1,7 @@
 import { Plugin, WorkspaceLeaf, TFile, CachedMetadata, moment } from 'obsidian';
 import { TodoExtendedView, VIEW_TYPE_TODO_EXTENDED } from './src/TodoExtendedView';
 import { TodoExtendedSettings, TodoExtendedSettingTab, DEFAULT_SETTINGS } from './src/Settings';
-import { TodoItem, TodoGroup, TodoPriority, GroupingCriterion } from './src/types';
+import { TodoItem, TodoGroup, TodoPriority, GroupingCriterion, SortingCriterion, SortByOption } from './src/types';
 
 export default class TodoExtendedPlugin extends Plugin {
 	settings!: TodoExtendedSettings;
@@ -143,42 +143,67 @@ export default class TodoExtendedPlugin extends Plugin {
 	}
 
 	private sortTodosWithHierarchy(todos: TodoItem[]): TodoItem[] {
-		// Group by file and maintain line order for hierarchical display
-		const byFile = new Map<string, TodoItem[]>();
-		
-		for (const todo of todos) {
-			const fileKey = todo.file.path;
-			if (!byFile.has(fileKey)) {
-				byFile.set(fileKey, []);
+		// Sort todos using the configured sorting criteria
+		return todos.sort((a, b) => {
+			// Apply each sorting criterion in order
+			for (const criterion of this.settings.sortingCriteria) {
+				const result = this.compareTodos(a, b, criterion);
+				if (result !== 0) return result;
 			}
-			byFile.get(fileKey)!.push(todo);
-		}
+			return 0;
+		});
+	}
 
-		const result: TodoItem[] = [];
+	private compareTodos(a: TodoItem, b: TodoItem, criterion: SortingCriterion): number {
+		let result = 0;
 		
-		// Sort each file's todos by line number to maintain hierarchy
-		for (const fileTodos of byFile.values()) {
-			const sortedFileTodos = fileTodos.sort((a, b) => {
-				// Primary sort: priority
+		switch (criterion.type) {
+			case 'priority':
 				const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2, 'none': 3 };
-				const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
-				if (priorityDiff !== 0) return priorityDiff;
-				
-				// Secondary sort: due date
+				result = priorityOrder[a.priority] - priorityOrder[b.priority];
+				break;
+			
+			case 'dueDate':
 				if (a.dueDate && b.dueDate) {
-					const dateDiff = a.dueDate.diff(b.dueDate);
-					if (dateDiff !== 0) return dateDiff;
+					result = a.dueDate.diff(b.dueDate);
+				} else if (a.dueDate && !b.dueDate) {
+					result = -1;
+				} else if (!a.dueDate && b.dueDate) {
+					result = 1;
 				}
-				if (a.dueDate && !b.dueDate) return -1;
-				if (!a.dueDate && b.dueDate) return 1;
-				
-				// Tertiary sort: maintain line order for hierarchy
-				return a.line - b.line;
-			});
-			result.push(...sortedFileTodos);
+				break;
+			
+			case 'fileName':
+				result = a.file.basename.localeCompare(b.file.basename);
+				break;
+			
+			case 'folderName':
+				const aFolder = a.file.parent?.path || '';
+				const bFolder = b.file.parent?.path || '';
+				result = aFolder.localeCompare(bFolder);
+				break;
+			
+			case 'text':
+				result = a.displayText.localeCompare(b.displayText);
+				break;
+			
+			case 'createdDate':
+				result = a.file.stat.ctime - b.file.stat.ctime;
+				break;
+			
+			case 'line':
+				// Compare file first, then line number to maintain hierarchy
+				const fileCompare = a.file.path.localeCompare(b.file.path);
+				if (fileCompare !== 0) {
+					result = fileCompare;
+				} else {
+					result = a.line - b.line;
+				}
+				break;
 		}
-
-		return result;
+		
+		// Apply direction (asc/desc)
+		return criterion.direction === 'desc' ? -result : result;
 	}
 
 	private extractTodosFromFile(file: TFile, content: string, cache: CachedMetadata | null): TodoItem[] {
@@ -229,7 +254,7 @@ export default class TodoExtendedPlugin extends Plugin {
 		// Extract due date based on settings format
 		const dateFormat = this.settings.dateInputFormat;
 		const dueDatePattern = this.settings.dueDateFormat.replace('%date%', `([^\\s]+)`);
-		const match = text.match(new RegExp(dueDatePattern));
+		let match = text.match(new RegExp(dueDatePattern));
 		if (match) {
 			const dateStr = match[1];
 			const parsedDate = moment(dateStr, dateFormat, true); // strict parsing
@@ -237,6 +262,28 @@ export default class TodoExtendedPlugin extends Plugin {
 				return parsedDate;
 			}
 		}
+		
+		// Also try common variations that might not match exact settings
+		// Try !due:YYYY-MM-DD pattern (common variation)
+		match = text.match(/!due:([^\s]+)/i);
+		if (match) {
+			const dateStr = match[1];
+			const parsedDate = moment(dateStr, dateFormat, true); // strict parsing
+			if (parsedDate.isValid()) {
+				return parsedDate;
+			}
+		}
+		
+		// Try due:YYYY-MM-DD pattern (without !)
+		match = text.match(/due:([^\s]+)/i);
+		if (match) {
+			const dateStr = match[1];
+			const parsedDate = moment(dateStr, dateFormat, true); // strict parsing
+			if (parsedDate.isValid()) {
+				return parsedDate;
+			}
+		}
+		
 		return null;
 	}
 
@@ -282,6 +329,22 @@ export default class TodoExtendedPlugin extends Plugin {
 		// Remove markdown image syntax from display text
 		displayText = displayText.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
 		displayText = displayText.replace(/!\[\[([^\]]+)\]\]/g, '');
+		
+		// Remove due date pattern from display text
+		const dueDatePattern = this.settings.dueDateFormat.replace('%date%', '[^\\s]+');
+		displayText = displayText.replace(new RegExp('\\s*' + dueDatePattern, 'g'), '');
+		
+		// Remove priority pattern from display text
+		const priorityPattern = this.settings.priorityFormat.replace('%priority%', '(high|medium|low)');
+		displayText = displayText.replace(new RegExp('\\s*' + priorityPattern, 'gi'), '');
+		
+		// Also handle common variations that might not match exact settings
+		// Remove !due:YYYY-MM-DD pattern (common variation)
+		displayText = displayText.replace(/\s*!due:[^\s]+/gi, '');
+		// Remove due:YYYY-MM-DD pattern (without !)
+		displayText = displayText.replace(/\s*due:[^\s]+/gi, '');
+		// Clean up any trailing ! characters that might be left behind
+		displayText = displayText.replace(/\s*!\s*$/, '');
 		
 		return displayText.trim();
 	}

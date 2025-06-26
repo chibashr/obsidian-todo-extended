@@ -1,12 +1,34 @@
 import { ItemView, WorkspaceLeaf, TFile, moment } from 'obsidian';
 import TodoExtendedPlugin from '../main';
-import { TodoItem, TodoGroup, TodoPriority } from './types';
+import { TodoItem, TodoGroup, TodoPriority, SortByOption, GroupByOption } from './types';
 
 export const VIEW_TYPE_TODO_EXTENDED = 'todo-extended-view';
 
 export class TodoExtendedView extends ItemView {
 	plugin: TodoExtendedPlugin;
 	private viewContentEl!: HTMLElement;
+	private searchFilters: {
+		text: string;
+		page: string;
+		priority: string;
+		dueDateFrom: string;
+		dueDateTo: string;
+		hasLinks: boolean | null;
+		completed: boolean | null;
+	} = {
+		text: '',
+		page: '',
+		priority: '',
+		dueDateFrom: '',
+		dueDateTo: '',
+		hasLinks: null,
+		completed: null
+	};
+	private panelsState = {
+		search: false,
+		grouping: false,
+		sorting: false
+	};
 
 	constructor(leaf: WorkspaceLeaf, plugin: TodoExtendedPlugin) {
 		super(leaf);
@@ -46,22 +68,54 @@ export class TodoExtendedView extends ItemView {
 		const headerEl = this.viewContentEl.createDiv('todo-extended-header');
 		headerEl.createEl('h3', { text: 'Todo Extended' });
 
+		// Add control buttons
+		const controlsEl = headerEl.createDiv('todo-controls');
+		
+		// Search/Filter button
+		const searchBtn = controlsEl.createEl('button', { 
+			text: 'Filter',
+			cls: 'todo-control-btn',
+			attr: { title: 'Search and Filter' }
+		});
+		searchBtn.addEventListener('click', () => this.toggleSearchPanel());
+		
+		// Grouping button
+		const groupingBtn = controlsEl.createEl('button', { 
+			text: 'Group',
+			cls: 'todo-control-btn',
+			attr: { title: 'Grouping Settings' }
+		});
+		groupingBtn.addEventListener('click', () => this.toggleGroupingPanel());
+		
+		// Sorting button
+		const sortingBtn = controlsEl.createEl('button', { 
+			text: 'Sort',
+			cls: 'todo-control-btn',
+			attr: { title: 'Sorting Settings' }
+		});
+		sortingBtn.addEventListener('click', () => this.toggleSortingPanel());
+
 		// Add refresh button
-		const refreshBtn = headerEl.createEl('button', { 
-			text: '↻',
-			cls: 'todo-refresh-btn'
+		const refreshBtn = controlsEl.createEl('button', { 
+			text: 'Refresh',
+			cls: 'todo-control-btn',
+			attr: { title: 'Refresh' }
 		});
 		refreshBtn.addEventListener('click', () => this.refreshTodos());
+
+		// Add control panels container
+		const panelsContainer = this.viewContentEl.createDiv('todo-panels-container');
 
 		// Add loading indicator
 		const loadingEl = this.viewContentEl.createDiv('todo-loading');
 		loadingEl.setText('Loading todos...');
 
 		try {
-			const groups = await this.plugin.getAllTodos();
+			const allGroups = await this.plugin.getAllTodos();
+			const filteredGroups = this.applySearchFilters(allGroups);
 			loadingEl.remove();
 
-			if (groups.length === 0) {
+			if (filteredGroups.length === 0) {
 				const emptyEl = this.viewContentEl.createDiv('todo-empty');
 				emptyEl.setText('No todos found');
 				return;
@@ -70,7 +124,7 @@ export class TodoExtendedView extends ItemView {
 			// Create todos container
 			const todosEl = this.viewContentEl.createDiv('todos-container');
 
-			for (const group of groups) {
+			for (const group of filteredGroups) {
 				this.renderGroup(todosEl, group);
 			}
 
@@ -198,32 +252,46 @@ export class TodoExtendedView extends ItemView {
 		fileEl.setText(todo.file.basename);
 		fileEl.addEventListener('click', () => this.openTodoFile(todo));
 
-		// Priority
-		if (todo.priority !== 'none') {
-			const priorityEl = metaEl.createSpan('todo-priority');
-			priorityEl.addClass(`todo-priority-${todo.priority}`);
-			priorityEl.setText(`${todo.priority.toUpperCase()}`);
-		}
-
-		// Add priority selector if inline editing is enabled
+		// Priority display - show colored tag when priority is set, selector when none
 		if (this.plugin.settings.enableInlineEditing) {
-			const prioritySelector = metaEl.createEl('select', { cls: 'todo-priority-selector' });
-			const priorities: { value: TodoPriority; label: string }[] = [
-				{ value: 'none', label: 'No Priority' },
-				{ value: 'low', label: 'Low' },
-				{ value: 'medium', label: 'Medium' },
-				{ value: 'high', label: 'High' }
-			];
-			
-			priorities.forEach(p => {
-				const option = prioritySelector.createEl('option', { value: p.value, text: p.label });
-				if (p.value === todo.priority) option.selected = true;
-			});
-			
-			prioritySelector.addEventListener('change', async () => {
-				const newPriority = prioritySelector.value as TodoPriority;
-				await this.plugin.updateTodoPriority(todo.id, newPriority);
-			});
+			if (todo.priority !== 'none') {
+				// Show colored priority tag that can be clicked to change
+				const priorityEl = metaEl.createSpan('todo-priority clickable-priority');
+				priorityEl.addClass(`todo-priority-${todo.priority}`);
+				priorityEl.setText(todo.priority.toUpperCase());
+				priorityEl.title = 'Click to change priority';
+				
+				priorityEl.addEventListener('click', (e) => {
+					e.stopPropagation();
+					this.showPrioritySelector(priorityEl, todo);
+				});
+			} else {
+				// Show priority selector when no priority is set
+				const prioritySelector = metaEl.createEl('select', { cls: 'todo-priority-selector' });
+				const priorities: { value: TodoPriority; label: string }[] = [
+					{ value: 'none', label: 'No Priority' },
+					{ value: 'low', label: 'Low' },
+					{ value: 'medium', label: 'Medium' },
+					{ value: 'high', label: 'High' }
+				];
+				
+				priorities.forEach(p => {
+					const option = prioritySelector.createEl('option', { value: p.value, text: p.label });
+					if (p.value === todo.priority) option.selected = true;
+				});
+				
+				prioritySelector.addEventListener('change', async () => {
+					const newPriority = prioritySelector.value as TodoPriority;
+					await this.plugin.updateTodoPriority(todo.id, newPriority);
+				});
+			}
+		} else {
+			// If inline editing is disabled, just show the priority tag
+			if (todo.priority !== 'none') {
+				const priorityEl = metaEl.createSpan('todo-priority');
+				priorityEl.addClass(`todo-priority-${todo.priority}`);
+				priorityEl.setText(todo.priority.toUpperCase());
+			}
 		}
 
 		// Due date with calendar popup
@@ -260,6 +328,468 @@ export class TodoExtendedView extends ItemView {
 				tagEl.setText(`#${tag}`);
 			}
 		}
+	}
+
+	private renderSortingControlsInternal(container: HTMLElement, isModal: boolean = false) {
+		const sortingEl = container.createDiv('todo-sorting-controls');
+		
+		// Primary sort dropdown
+		const primarySortContainer = sortingEl.createDiv('sort-container');
+		primarySortContainer.createEl('label', { text: 'Sort by: ', cls: 'sort-label' });
+		
+		const primarySortSelect = primarySortContainer.createEl('select', { cls: 'sort-select' });
+		const sortOptions: { value: SortByOption; label: string }[] = [
+			{ value: 'priority', label: 'Priority' },
+			{ value: 'dueDate', label: 'Due Date' },
+			{ value: 'fileName', label: 'File Name' },
+			{ value: 'folderName', label: 'Folder' },
+			{ value: 'text', label: 'Task Text' },
+			{ value: 'line', label: 'Order in File' }
+		];
+		
+		sortOptions.forEach(option => {
+			const optionEl = primarySortSelect.createEl('option', { 
+				value: option.value, 
+				text: option.label 
+			});
+			if (option.value === this.plugin.settings.sortingCriteria[0]?.type) {
+				optionEl.selected = true;
+			}
+		});
+		
+		// Direction toggle for primary sort
+		const directionBtn = primarySortContainer.createEl('button', {
+			text: this.plugin.settings.sortingCriteria[0]?.direction === 'desc' ? '↓' : '↑',
+			cls: 'sort-direction-btn'
+		});
+		directionBtn.title = this.plugin.settings.sortingCriteria[0]?.direction === 'desc' ? 'Descending' : 'Ascending';
+		
+		// Event listeners
+		primarySortSelect.addEventListener('change', async () => {
+			const newType = primarySortSelect.value as SortByOption;
+			this.plugin.settings.sortingCriteria[0] = {
+				...this.plugin.settings.sortingCriteria[0],
+				type: newType
+			};
+			await this.plugin.saveSettings();
+		});
+		
+		directionBtn.addEventListener('click', async () => {
+			const currentDirection = this.plugin.settings.sortingCriteria[0]?.direction || 'asc';
+			const newDirection = currentDirection === 'asc' ? 'desc' : 'asc';
+			
+			this.plugin.settings.sortingCriteria[0] = {
+				...this.plugin.settings.sortingCriteria[0],
+				direction: newDirection
+			};
+			
+			directionBtn.textContent = newDirection === 'desc' ? '↓' : '↑';
+			directionBtn.title = newDirection === 'desc' ? 'Descending' : 'Ascending';
+			
+			await this.plugin.saveSettings();
+		});
+	}
+
+	private renderGroupingControlsInModal(container: HTMLElement) {
+		this.renderGroupingControlsInternal(container, true);
+	}
+
+	private renderSortingControlsInModal(container: HTMLElement) {
+		this.renderSortingControlsInternal(container, true);
+	}
+
+	private renderGroupingControlsInternal(container: HTMLElement, isModal: boolean = false) {
+		const groupingEl = container.createDiv('todo-grouping-controls');
+		
+		// Header with add button
+		const headerEl = groupingEl.createDiv('grouping-header');
+		headerEl.createEl('span', { text: 'Grouping:', cls: 'grouping-header-label' });
+		
+		const addButton = headerEl.createEl('button', {
+			text: '+ Add',
+			cls: 'add-grouping-btn'
+		});
+		
+		addButton.addEventListener('click', async () => {
+			const newCriterion = {
+				id: `criterion-${Date.now()}`,
+				type: 'page' as GroupByOption,
+				enabled: true,
+				order: this.plugin.settings.groupingCriteria.length
+			};
+			
+			this.plugin.settings.groupingCriteria.push(newCriterion);
+			await this.plugin.saveSettings();
+			if (isModal) {
+				container.empty();
+				this.renderGroupingControlsInternal(container, true);
+			} else {
+				this.renderPanels();
+			}
+		});
+		
+		// Render existing criteria
+		const criteriaContainer = groupingEl.createDiv('grouping-criteria-list');
+		
+		const enabledCriteria = this.plugin.settings.groupingCriteria
+			.filter(c => c.enabled)
+			.sort((a, b) => a.order - b.order);
+		
+		if (enabledCriteria.length === 0) {
+			const emptyEl = criteriaContainer.createDiv('grouping-empty');
+			emptyEl.setText('No grouping criteria. Click "Add" to create one.');
+		} else {
+					for (const criterion of enabledCriteria) {
+			this.renderGroupingCriterion(criteriaContainer, criterion, container, isModal);
+		}
+		}
+	}
+
+	private renderGroupingCriterion(container: HTMLElement, criterion: any, parentContainer: HTMLElement, isModal: boolean) {
+		const criterionEl = container.createDiv('grouping-criterion-panel');
+		
+		// Type dropdown
+		const typeSelect = criterionEl.createEl('select', { cls: 'criterion-type' });
+		const typeOptions = [
+			{ value: 'page', label: 'Page' },
+			{ value: 'folder', label: 'Folder' },
+			{ value: 'tag', label: 'Tag' },
+			{ value: 'property', label: 'Property' },
+			{ value: 'dueDate', label: 'Due Date' },
+			{ value: 'priority', label: 'Priority' }
+		];
+		
+		typeOptions.forEach(option => {
+			const optionEl = typeSelect.createEl('option', {
+				value: option.value,
+				text: option.label
+			});
+			if (option.value === criterion.type) {
+				optionEl.selected = true;
+			}
+		});
+		
+		typeSelect.addEventListener('change', async () => {
+			criterion.type = typeSelect.value as GroupByOption;
+			if (criterion.type !== 'property') {
+				criterion.property = undefined;
+			}
+			await this.plugin.saveSettings();
+			if (isModal) {
+				parentContainer.empty();
+				this.renderGroupingControlsInternal(parentContainer, true);
+			} else {
+				this.renderPanels();
+			}
+		});
+
+		// Property selector (only for property type)
+		if (criterion.type === 'property') {
+			const propertySelect = criterionEl.createEl('select', { cls: 'criterion-property' });
+			
+			// Add empty option
+			propertySelect.createEl('option', { value: '', text: 'Select property...' });
+			
+			// Add available properties
+			for (const prop of this.plugin.settings.availableProperties) {
+				const propOption = propertySelect.createEl('option', {
+					value: prop,
+					text: prop
+				});
+				if (prop === criterion.property) {
+					propOption.selected = true;
+				}
+			}
+			
+			propertySelect.addEventListener('change', async () => {
+				criterion.property = propertySelect.value || undefined;
+				await this.plugin.saveSettings();
+			});
+		}
+
+		// Remove button
+		const removeBtn = criterionEl.createEl('button', {
+			text: '×',
+			cls: 'remove-grouping-btn'
+		});
+		
+		removeBtn.addEventListener('click', async () => {
+			const index = this.plugin.settings.groupingCriteria.findIndex(c => c.id === criterion.id);
+			if (index !== -1) {
+				this.plugin.settings.groupingCriteria.splice(index, 1);
+				// Reorder remaining criteria
+				this.plugin.settings.groupingCriteria.forEach((c, i) => c.order = i);
+				await this.plugin.saveSettings();
+				if (isModal) {
+					parentContainer.empty();
+					this.renderGroupingControlsInternal(parentContainer, true);
+				} else {
+					this.renderPanels();
+				}
+			}
+		});
+	}
+
+	private toggleSearchPanel() {
+		this.panelsState.search = !this.panelsState.search;
+		this.panelsState.grouping = false;
+		this.panelsState.sorting = false;
+		this.renderPanels();
+	}
+
+	private toggleGroupingPanel() {
+		this.panelsState.grouping = !this.panelsState.grouping;
+		this.panelsState.search = false;
+		this.panelsState.sorting = false;
+		this.renderPanels();
+	}
+
+	private toggleSortingPanel() {
+		this.panelsState.sorting = !this.panelsState.sorting;
+		this.panelsState.search = false;
+		this.panelsState.grouping = false;
+		this.renderPanels();
+	}
+
+	private renderPanels() {
+		const panelsContainer = this.viewContentEl.querySelector('.todo-panels-container') as HTMLElement;
+		if (!panelsContainer) return;
+		
+		panelsContainer.empty();
+		
+		if (this.panelsState.search) {
+			this.renderSearchPanel(panelsContainer);
+		} else if (this.panelsState.grouping) {
+			this.renderGroupingPanel(panelsContainer);
+		} else if (this.panelsState.sorting) {
+			this.renderSortingPanel(panelsContainer);
+		}
+	}
+
+	private renderSearchPanel(container: HTMLElement) {
+		const panel = container.createDiv('todo-panel search-panel');
+		
+		// Panel header
+		const header = panel.createDiv('todo-panel-header');
+		header.createEl('h4', { text: 'Search and Filter' });
+		
+		// Search form
+		const form = panel.createDiv('todo-search-form');
+		
+		// Create a grid layout for compact form
+		const formGrid = form.createDiv('search-form-grid');
+		
+		// Text search
+		const textGroup = formGrid.createDiv('search-group');
+		textGroup.createEl('label', { text: 'Text:' });
+		const textInput = textGroup.createEl('input', { 
+			type: 'text', 
+			placeholder: 'Search tasks...',
+			value: this.searchFilters.text
+		});
+		
+		// Page filter
+		const pageGroup = formGrid.createDiv('search-group');
+		pageGroup.createEl('label', { text: 'Page:' });
+		const pageInput = pageGroup.createEl('input', { 
+			type: 'text', 
+			placeholder: 'Filter pages...',
+			value: this.searchFilters.page
+		});
+		
+		// Priority filter
+		const priorityGroup = formGrid.createDiv('search-group');
+		priorityGroup.createEl('label', { text: 'Priority:' });
+		const prioritySelect = priorityGroup.createEl('select');
+		const priorityOptions = [
+			{ value: '', label: 'Any' },
+			{ value: 'high', label: 'High' },
+			{ value: 'medium', label: 'Medium' },
+			{ value: 'low', label: 'Low' },
+			{ value: 'none', label: 'None' }
+		];
+		priorityOptions.forEach(option => {
+			const optionEl = prioritySelect.createEl('option', { value: option.value, text: option.label });
+			if (option.value === this.searchFilters.priority) optionEl.selected = true;
+		});
+		
+		// Due date from
+		const fromGroup = formGrid.createDiv('search-group');
+		fromGroup.createEl('label', { text: 'Due from:' });
+		const fromInput = fromGroup.createEl('input', { 
+			type: 'date',
+			value: this.searchFilters.dueDateFrom
+		});
+		
+		// Due date to
+		const toGroup = formGrid.createDiv('search-group');
+		toGroup.createEl('label', { text: 'Due to:' });
+		const toInput = toGroup.createEl('input', { 
+			type: 'date',
+			value: this.searchFilters.dueDateTo
+		});
+		
+		// Checkboxes in a row
+		const checkboxRow = form.createDiv('checkbox-row');
+		
+		const linksLabel = checkboxRow.createEl('label', { cls: 'checkbox-label' });
+		const linksCheckbox = linksLabel.createEl('input', { type: 'checkbox' });
+		linksLabel.createSpan({ text: 'Has links' });
+		if (this.searchFilters.hasLinks === true) linksCheckbox.checked = true;
+		
+		const completedLabel = checkboxRow.createEl('label', { cls: 'checkbox-label' });
+		const completedCheckbox = completedLabel.createEl('input', { type: 'checkbox' });
+		completedLabel.createSpan({ text: 'Completed only' });
+		if (this.searchFilters.completed === true) completedCheckbox.checked = true;
+		
+		// Buttons
+		const buttonGroup = form.createDiv('search-buttons');
+		
+		const applyBtn = buttonGroup.createEl('button', { text: 'Apply', cls: 'todo-btn-primary' });
+		applyBtn.addEventListener('click', () => {
+			this.searchFilters.text = textInput.value;
+			this.searchFilters.page = pageInput.value;
+			this.searchFilters.priority = prioritySelect.value;
+			this.searchFilters.dueDateFrom = fromInput.value;
+			this.searchFilters.dueDateTo = toInput.value;
+			this.searchFilters.hasLinks = linksCheckbox.checked ? true : null;
+			this.searchFilters.completed = completedCheckbox.checked ? true : null;
+			
+			this.refreshTodos();
+		});
+		
+		const clearBtn = buttonGroup.createEl('button', { text: 'Clear', cls: 'todo-btn-secondary' });
+		clearBtn.addEventListener('click', () => {
+			this.searchFilters = {
+				text: '',
+				page: '',
+				priority: '',
+				dueDateFrom: '',
+				dueDateTo: '',
+				hasLinks: null,
+				completed: null
+			};
+			this.refreshTodos();
+		});
+	}
+
+	private renderGroupingPanel(container: HTMLElement) {
+		const panel = container.createDiv('todo-panel grouping-panel');
+		
+		// Panel header
+		const header = panel.createDiv('todo-panel-header');
+		header.createEl('h4', { text: 'Grouping Settings' });
+		
+		// Grouping controls
+		this.renderGroupingControlsInternal(panel, false);
+	}
+
+	private renderSortingPanel(container: HTMLElement) {
+		const panel = container.createDiv('todo-panel sorting-panel');
+		
+		// Panel header
+		const header = panel.createDiv('todo-panel-header');
+		header.createEl('h4', { text: 'Sorting Settings' });
+		
+		// Sorting controls
+		this.renderSortingControlsInternal(panel, false);
+	}
+
+	private applySearchFilters(groups: TodoGroup[]): TodoGroup[] {
+		return groups.map(group => {
+			const filteredTodos = group.todos.filter(todo => {
+				// Text filter
+				if (this.searchFilters.text && !todo.displayText.toLowerCase().includes(this.searchFilters.text.toLowerCase())) {
+					return false;
+				}
+				
+				// Page filter
+				if (this.searchFilters.page && !todo.file.basename.toLowerCase().includes(this.searchFilters.page.toLowerCase())) {
+					return false;
+				}
+				
+				// Priority filter
+				if (this.searchFilters.priority && todo.priority !== this.searchFilters.priority) {
+					return false;
+				}
+				
+				// Due date range filter
+				if (this.searchFilters.dueDateFrom || this.searchFilters.dueDateTo) {
+					if (!todo.dueDate) return false;
+					
+					if (this.searchFilters.dueDateFrom) {
+						const fromDate = moment(this.searchFilters.dueDateFrom);
+						if (todo.dueDate.isBefore(fromDate, 'day')) return false;
+					}
+					
+					if (this.searchFilters.dueDateTo) {
+						const toDate = moment(this.searchFilters.dueDateTo);
+						if (todo.dueDate.isAfter(toDate, 'day')) return false;
+					}
+				}
+				
+				// Has links filter
+				if (this.searchFilters.hasLinks === true && todo.linkedNotes.length === 0) {
+					return false;
+				}
+				
+				// Completed filter
+				if (this.searchFilters.completed === true && !todo.completed) {
+					return false;
+				}
+				
+				return true;
+			});
+			
+			return {
+				...group,
+				todos: filteredTodos
+			};
+		}).filter(group => group.todos.length > 0);
+	}
+
+	private showPrioritySelector(priorityEl: HTMLElement, todo: TodoItem) {
+		// Create temporary dropdown
+		const selector = priorityEl.parentElement!.createEl('select', { cls: 'todo-priority-selector-temp' });
+		const priorities: { value: TodoPriority; label: string }[] = [
+			{ value: 'none', label: 'No Priority' },
+			{ value: 'low', label: 'Low' },
+			{ value: 'medium', label: 'Medium' },
+			{ value: 'high', label: 'High' }
+		];
+		
+		priorities.forEach(p => {
+			const option = selector.createEl('option', { value: p.value, text: p.label });
+			if (p.value === todo.priority) option.selected = true;
+		});
+		
+		// Position next to the priority element
+		priorityEl.style.display = 'none';
+		
+		// Focus and handle selection
+		selector.focus();
+		
+		const handleSelection = async () => {
+			const newPriority = selector.value as TodoPriority;
+			await this.plugin.updateTodoPriority(todo.id, newPriority);
+			selector.remove();
+			priorityEl.style.display = '';
+		};
+		
+		const cleanup = () => {
+			selector.remove();
+			priorityEl.style.display = '';
+		};
+		
+		selector.addEventListener('change', handleSelection);
+		selector.addEventListener('blur', cleanup);
+		
+		// Handle escape key
+		selector.addEventListener('keydown', (e) => {
+			if (e.key === 'Escape') {
+				cleanup();
+			}
+		});
 	}
 
 	private async openTodoFile(todo: TodoItem) {

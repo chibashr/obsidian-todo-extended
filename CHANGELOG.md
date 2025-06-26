@@ -39,4 +39,45 @@ All notable changes to the Todo Extended Plugin will be documented in this file.
 - Priority format configuration
 - Advanced multi-level grouping with dynamic property detection
 - Image display controls (show/hide, auto-collapse)
-- Various UI and behavior toggles 
+- Various UI and behavior toggles
+
+## [Unreleased]
+
+### Added
+- Enhanced task display: Due dates and priorities are now parsed from task names and displayed separately as metadata, keeping the task list clean and organized.
+  - Task text like `Get more information on RFC2544 Testing kit from marshalltown !due:2025-06-29` will now display as just `Get more information on RFC2544 Testing kit from marshalltown` with the due date shown separately
+  - Supports multiple due date formats: `due:YYYY-MM-DD`, `!due:YYYY-MM-DD`, and custom formats defined in settings
+  - Priority indicators (e.g., `!high`, `!medium`, `!low`) are also stripped from display text but preserved as metadata
+- Advanced sorting functionality in the todo panel:
+  - Sort todos by priority, due date, file name, folder name, task text, created date, or order in file
+  - Toggle between ascending and descending sort order with a single click
+  - Multi-level sorting: grouping is applied first, then sorting within each group
+  - Configurable default sorting criteria in settings
+  - Real-time sorting control directly in the todo panel
+- Compact text-based control interface:
+  - Replaced emoji icons with clean text buttons (Filter, Group, Sort, Refresh)
+  - Buttons toggle inline panels instead of modal dialogs for better workflow
+  - Consistent with Obsidian's design language and accessibility standards
+- Advanced search and filtering capabilities:
+  - Text search across task content
+  - Page name filtering
+  - Priority-based filtering (High, Medium, Low, None)
+  - Due date range filtering with from/to date pickers
+  - Linked notes filter (show only tasks with [[links]])
+  - Completion status filter (show only completed tasks)
+  - Compact inline panel interface with apply/clear functionality
+- Improved priority display and interaction:
+  - When priority is set, shows only the colored priority tag (eliminates duplicate text)
+  - Clickable priority tags for quick editing when inline editing is enabled
+  - "No Priority" selector only appears when no priority is assigned
+  - Eliminates visual clutter and redundant information display
+- Inline panel-based grouping controls:
+  - Full grouping functionality in a collapsible inline panel
+  - Dynamic grouping criteria management with "Add" button
+  - Supports all grouping options: page, folder, tag, property, due date, and priority
+  - Custom property grouping with dropdown selection from available frontmatter properties
+  - Individual remove buttons for each grouping criterion
+- Inline panel-based sorting controls:
+  - Complete sorting interface in a collapsible inline panel
+  - All sorting options available with direction toggles
+  - Multi-level sorting configuration 

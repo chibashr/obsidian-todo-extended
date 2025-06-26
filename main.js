@@ -36,6 +36,20 @@ var VIEW_TYPE_TODO_EXTENDED = "todo-extended-view";
 var TodoExtendedView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
+    this.searchFilters = {
+      text: "",
+      page: "",
+      priority: "",
+      dueDateFrom: "",
+      dueDateTo: "",
+      hasLinks: null,
+      completed: null
+    };
+    this.panelsState = {
+      search: false,
+      grouping: false,
+      sorting: false
+    };
     this.plugin = plugin;
   }
   getViewType() {
@@ -61,23 +75,45 @@ var TodoExtendedView = class extends import_obsidian.ItemView {
     this.viewContentEl.empty();
     const headerEl = this.viewContentEl.createDiv("todo-extended-header");
     headerEl.createEl("h3", { text: "Todo Extended" });
-    const refreshBtn = headerEl.createEl("button", {
-      text: "\u21BB",
-      cls: "todo-refresh-btn"
+    const controlsEl = headerEl.createDiv("todo-controls");
+    const searchBtn = controlsEl.createEl("button", {
+      text: "Filter",
+      cls: "todo-control-btn",
+      attr: { title: "Search and Filter" }
+    });
+    searchBtn.addEventListener("click", () => this.toggleSearchPanel());
+    const groupingBtn = controlsEl.createEl("button", {
+      text: "Group",
+      cls: "todo-control-btn",
+      attr: { title: "Grouping Settings" }
+    });
+    groupingBtn.addEventListener("click", () => this.toggleGroupingPanel());
+    const sortingBtn = controlsEl.createEl("button", {
+      text: "Sort",
+      cls: "todo-control-btn",
+      attr: { title: "Sorting Settings" }
+    });
+    sortingBtn.addEventListener("click", () => this.toggleSortingPanel());
+    const refreshBtn = controlsEl.createEl("button", {
+      text: "Refresh",
+      cls: "todo-control-btn",
+      attr: { title: "Refresh" }
     });
     refreshBtn.addEventListener("click", () => this.refreshTodos());
+    const panelsContainer = this.viewContentEl.createDiv("todo-panels-container");
     const loadingEl = this.viewContentEl.createDiv("todo-loading");
     loadingEl.setText("Loading todos...");
     try {
-      const groups = await this.plugin.getAllTodos();
+      const allGroups = await this.plugin.getAllTodos();
+      const filteredGroups = this.applySearchFilters(allGroups);
       loadingEl.remove();
-      if (groups.length === 0) {
+      if (filteredGroups.length === 0) {
         const emptyEl = this.viewContentEl.createDiv("todo-empty");
         emptyEl.setText("No todos found");
         return;
       }
       const todosEl = this.viewContentEl.createDiv("todos-container");
-      for (const group of groups) {
+      for (const group of filteredGroups) {
         this.renderGroup(todosEl, group);
       }
     } catch (error) {
@@ -173,28 +209,40 @@ var TodoExtendedView = class extends import_obsidian.ItemView {
     const fileEl = metaEl.createSpan("todo-file");
     fileEl.setText(todo.file.basename);
     fileEl.addEventListener("click", () => this.openTodoFile(todo));
-    if (todo.priority !== "none") {
-      const priorityEl = metaEl.createSpan("todo-priority");
-      priorityEl.addClass(`todo-priority-${todo.priority}`);
-      priorityEl.setText(`${todo.priority.toUpperCase()}`);
-    }
     if (this.plugin.settings.enableInlineEditing) {
-      const prioritySelector = metaEl.createEl("select", { cls: "todo-priority-selector" });
-      const priorities = [
-        { value: "none", label: "No Priority" },
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High" }
-      ];
-      priorities.forEach((p) => {
-        const option = prioritySelector.createEl("option", { value: p.value, text: p.label });
-        if (p.value === todo.priority)
-          option.selected = true;
-      });
-      prioritySelector.addEventListener("change", async () => {
-        const newPriority = prioritySelector.value;
-        await this.plugin.updateTodoPriority(todo.id, newPriority);
-      });
+      if (todo.priority !== "none") {
+        const priorityEl = metaEl.createSpan("todo-priority clickable-priority");
+        priorityEl.addClass(`todo-priority-${todo.priority}`);
+        priorityEl.setText(todo.priority.toUpperCase());
+        priorityEl.title = "Click to change priority";
+        priorityEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.showPrioritySelector(priorityEl, todo);
+        });
+      } else {
+        const prioritySelector = metaEl.createEl("select", { cls: "todo-priority-selector" });
+        const priorities = [
+          { value: "none", label: "No Priority" },
+          { value: "low", label: "Low" },
+          { value: "medium", label: "Medium" },
+          { value: "high", label: "High" }
+        ];
+        priorities.forEach((p) => {
+          const option = prioritySelector.createEl("option", { value: p.value, text: p.label });
+          if (p.value === todo.priority)
+            option.selected = true;
+        });
+        prioritySelector.addEventListener("change", async () => {
+          const newPriority = prioritySelector.value;
+          await this.plugin.updateTodoPriority(todo.id, newPriority);
+        });
+      }
+    } else {
+      if (todo.priority !== "none") {
+        const priorityEl = metaEl.createSpan("todo-priority");
+        priorityEl.addClass(`todo-priority-${todo.priority}`);
+        priorityEl.setText(todo.priority.toUpperCase());
+      }
     }
     const dueDateEl = metaEl.createSpan("todo-due-date clickable-date");
     if (todo.dueDate) {
@@ -223,6 +271,366 @@ var TodoExtendedView = class extends import_obsidian.ItemView {
         tagEl.setText(`#${tag}`);
       }
     }
+  }
+  renderSortingControlsInternal(container, isModal = false) {
+    var _a, _b;
+    const sortingEl = container.createDiv("todo-sorting-controls");
+    const primarySortContainer = sortingEl.createDiv("sort-container");
+    primarySortContainer.createEl("label", { text: "Sort by: ", cls: "sort-label" });
+    const primarySortSelect = primarySortContainer.createEl("select", { cls: "sort-select" });
+    const sortOptions = [
+      { value: "priority", label: "Priority" },
+      { value: "dueDate", label: "Due Date" },
+      { value: "fileName", label: "File Name" },
+      { value: "folderName", label: "Folder" },
+      { value: "text", label: "Task Text" },
+      { value: "line", label: "Order in File" }
+    ];
+    sortOptions.forEach((option) => {
+      var _a2;
+      const optionEl = primarySortSelect.createEl("option", {
+        value: option.value,
+        text: option.label
+      });
+      if (option.value === ((_a2 = this.plugin.settings.sortingCriteria[0]) == null ? void 0 : _a2.type)) {
+        optionEl.selected = true;
+      }
+    });
+    const directionBtn = primarySortContainer.createEl("button", {
+      text: ((_a = this.plugin.settings.sortingCriteria[0]) == null ? void 0 : _a.direction) === "desc" ? "\u2193" : "\u2191",
+      cls: "sort-direction-btn"
+    });
+    directionBtn.title = ((_b = this.plugin.settings.sortingCriteria[0]) == null ? void 0 : _b.direction) === "desc" ? "Descending" : "Ascending";
+    primarySortSelect.addEventListener("change", async () => {
+      const newType = primarySortSelect.value;
+      this.plugin.settings.sortingCriteria[0] = {
+        ...this.plugin.settings.sortingCriteria[0],
+        type: newType
+      };
+      await this.plugin.saveSettings();
+    });
+    directionBtn.addEventListener("click", async () => {
+      var _a2;
+      const currentDirection = ((_a2 = this.plugin.settings.sortingCriteria[0]) == null ? void 0 : _a2.direction) || "asc";
+      const newDirection = currentDirection === "asc" ? "desc" : "asc";
+      this.plugin.settings.sortingCriteria[0] = {
+        ...this.plugin.settings.sortingCriteria[0],
+        direction: newDirection
+      };
+      directionBtn.textContent = newDirection === "desc" ? "\u2193" : "\u2191";
+      directionBtn.title = newDirection === "desc" ? "Descending" : "Ascending";
+      await this.plugin.saveSettings();
+    });
+  }
+  renderGroupingControlsInModal(container) {
+    this.renderGroupingControlsInternal(container, true);
+  }
+  renderSortingControlsInModal(container) {
+    this.renderSortingControlsInternal(container, true);
+  }
+  renderGroupingControlsInternal(container, isModal = false) {
+    const groupingEl = container.createDiv("todo-grouping-controls");
+    const headerEl = groupingEl.createDiv("grouping-header");
+    headerEl.createEl("span", { text: "Grouping:", cls: "grouping-header-label" });
+    const addButton = headerEl.createEl("button", {
+      text: "+ Add",
+      cls: "add-grouping-btn"
+    });
+    addButton.addEventListener("click", async () => {
+      const newCriterion = {
+        id: `criterion-${Date.now()}`,
+        type: "page",
+        enabled: true,
+        order: this.plugin.settings.groupingCriteria.length
+      };
+      this.plugin.settings.groupingCriteria.push(newCriterion);
+      await this.plugin.saveSettings();
+      if (isModal) {
+        container.empty();
+        this.renderGroupingControlsInternal(container, true);
+      } else {
+        this.renderPanels();
+      }
+    });
+    const criteriaContainer = groupingEl.createDiv("grouping-criteria-list");
+    const enabledCriteria = this.plugin.settings.groupingCriteria.filter((c) => c.enabled).sort((a, b) => a.order - b.order);
+    if (enabledCriteria.length === 0) {
+      const emptyEl = criteriaContainer.createDiv("grouping-empty");
+      emptyEl.setText('No grouping criteria. Click "Add" to create one.');
+    } else {
+      for (const criterion of enabledCriteria) {
+        this.renderGroupingCriterion(criteriaContainer, criterion, container, isModal);
+      }
+    }
+  }
+  renderGroupingCriterion(container, criterion, parentContainer, isModal) {
+    const criterionEl = container.createDiv("grouping-criterion-panel");
+    const typeSelect = criterionEl.createEl("select", { cls: "criterion-type" });
+    const typeOptions = [
+      { value: "page", label: "Page" },
+      { value: "folder", label: "Folder" },
+      { value: "tag", label: "Tag" },
+      { value: "property", label: "Property" },
+      { value: "dueDate", label: "Due Date" },
+      { value: "priority", label: "Priority" }
+    ];
+    typeOptions.forEach((option) => {
+      const optionEl = typeSelect.createEl("option", {
+        value: option.value,
+        text: option.label
+      });
+      if (option.value === criterion.type) {
+        optionEl.selected = true;
+      }
+    });
+    typeSelect.addEventListener("change", async () => {
+      criterion.type = typeSelect.value;
+      if (criterion.type !== "property") {
+        criterion.property = void 0;
+      }
+      await this.plugin.saveSettings();
+      if (isModal) {
+        parentContainer.empty();
+        this.renderGroupingControlsInternal(parentContainer, true);
+      } else {
+        this.renderPanels();
+      }
+    });
+    if (criterion.type === "property") {
+      const propertySelect = criterionEl.createEl("select", { cls: "criterion-property" });
+      propertySelect.createEl("option", { value: "", text: "Select property..." });
+      for (const prop of this.plugin.settings.availableProperties) {
+        const propOption = propertySelect.createEl("option", {
+          value: prop,
+          text: prop
+        });
+        if (prop === criterion.property) {
+          propOption.selected = true;
+        }
+      }
+      propertySelect.addEventListener("change", async () => {
+        criterion.property = propertySelect.value || void 0;
+        await this.plugin.saveSettings();
+      });
+    }
+    const removeBtn = criterionEl.createEl("button", {
+      text: "\xD7",
+      cls: "remove-grouping-btn"
+    });
+    removeBtn.addEventListener("click", async () => {
+      const index = this.plugin.settings.groupingCriteria.findIndex((c) => c.id === criterion.id);
+      if (index !== -1) {
+        this.plugin.settings.groupingCriteria.splice(index, 1);
+        this.plugin.settings.groupingCriteria.forEach((c, i) => c.order = i);
+        await this.plugin.saveSettings();
+        if (isModal) {
+          parentContainer.empty();
+          this.renderGroupingControlsInternal(parentContainer, true);
+        } else {
+          this.renderPanels();
+        }
+      }
+    });
+  }
+  toggleSearchPanel() {
+    this.panelsState.search = !this.panelsState.search;
+    this.panelsState.grouping = false;
+    this.panelsState.sorting = false;
+    this.renderPanels();
+  }
+  toggleGroupingPanel() {
+    this.panelsState.grouping = !this.panelsState.grouping;
+    this.panelsState.search = false;
+    this.panelsState.sorting = false;
+    this.renderPanels();
+  }
+  toggleSortingPanel() {
+    this.panelsState.sorting = !this.panelsState.sorting;
+    this.panelsState.search = false;
+    this.panelsState.grouping = false;
+    this.renderPanels();
+  }
+  renderPanels() {
+    const panelsContainer = this.viewContentEl.querySelector(".todo-panels-container");
+    if (!panelsContainer)
+      return;
+    panelsContainer.empty();
+    if (this.panelsState.search) {
+      this.renderSearchPanel(panelsContainer);
+    } else if (this.panelsState.grouping) {
+      this.renderGroupingPanel(panelsContainer);
+    } else if (this.panelsState.sorting) {
+      this.renderSortingPanel(panelsContainer);
+    }
+  }
+  renderSearchPanel(container) {
+    const panel = container.createDiv("todo-panel search-panel");
+    const header = panel.createDiv("todo-panel-header");
+    header.createEl("h4", { text: "Search and Filter" });
+    const form = panel.createDiv("todo-search-form");
+    const formGrid = form.createDiv("search-form-grid");
+    const textGroup = formGrid.createDiv("search-group");
+    textGroup.createEl("label", { text: "Text:" });
+    const textInput = textGroup.createEl("input", {
+      type: "text",
+      placeholder: "Search tasks...",
+      value: this.searchFilters.text
+    });
+    const pageGroup = formGrid.createDiv("search-group");
+    pageGroup.createEl("label", { text: "Page:" });
+    const pageInput = pageGroup.createEl("input", {
+      type: "text",
+      placeholder: "Filter pages...",
+      value: this.searchFilters.page
+    });
+    const priorityGroup = formGrid.createDiv("search-group");
+    priorityGroup.createEl("label", { text: "Priority:" });
+    const prioritySelect = priorityGroup.createEl("select");
+    const priorityOptions = [
+      { value: "", label: "Any" },
+      { value: "high", label: "High" },
+      { value: "medium", label: "Medium" },
+      { value: "low", label: "Low" },
+      { value: "none", label: "None" }
+    ];
+    priorityOptions.forEach((option) => {
+      const optionEl = prioritySelect.createEl("option", { value: option.value, text: option.label });
+      if (option.value === this.searchFilters.priority)
+        optionEl.selected = true;
+    });
+    const fromGroup = formGrid.createDiv("search-group");
+    fromGroup.createEl("label", { text: "Due from:" });
+    const fromInput = fromGroup.createEl("input", {
+      type: "date",
+      value: this.searchFilters.dueDateFrom
+    });
+    const toGroup = formGrid.createDiv("search-group");
+    toGroup.createEl("label", { text: "Due to:" });
+    const toInput = toGroup.createEl("input", {
+      type: "date",
+      value: this.searchFilters.dueDateTo
+    });
+    const checkboxRow = form.createDiv("checkbox-row");
+    const linksLabel = checkboxRow.createEl("label", { cls: "checkbox-label" });
+    const linksCheckbox = linksLabel.createEl("input", { type: "checkbox" });
+    linksLabel.createSpan({ text: "Has links" });
+    if (this.searchFilters.hasLinks === true)
+      linksCheckbox.checked = true;
+    const completedLabel = checkboxRow.createEl("label", { cls: "checkbox-label" });
+    const completedCheckbox = completedLabel.createEl("input", { type: "checkbox" });
+    completedLabel.createSpan({ text: "Completed only" });
+    if (this.searchFilters.completed === true)
+      completedCheckbox.checked = true;
+    const buttonGroup = form.createDiv("search-buttons");
+    const applyBtn = buttonGroup.createEl("button", { text: "Apply", cls: "todo-btn-primary" });
+    applyBtn.addEventListener("click", () => {
+      this.searchFilters.text = textInput.value;
+      this.searchFilters.page = pageInput.value;
+      this.searchFilters.priority = prioritySelect.value;
+      this.searchFilters.dueDateFrom = fromInput.value;
+      this.searchFilters.dueDateTo = toInput.value;
+      this.searchFilters.hasLinks = linksCheckbox.checked ? true : null;
+      this.searchFilters.completed = completedCheckbox.checked ? true : null;
+      this.refreshTodos();
+    });
+    const clearBtn = buttonGroup.createEl("button", { text: "Clear", cls: "todo-btn-secondary" });
+    clearBtn.addEventListener("click", () => {
+      this.searchFilters = {
+        text: "",
+        page: "",
+        priority: "",
+        dueDateFrom: "",
+        dueDateTo: "",
+        hasLinks: null,
+        completed: null
+      };
+      this.refreshTodos();
+    });
+  }
+  renderGroupingPanel(container) {
+    const panel = container.createDiv("todo-panel grouping-panel");
+    const header = panel.createDiv("todo-panel-header");
+    header.createEl("h4", { text: "Grouping Settings" });
+    this.renderGroupingControlsInternal(panel, false);
+  }
+  renderSortingPanel(container) {
+    const panel = container.createDiv("todo-panel sorting-panel");
+    const header = panel.createDiv("todo-panel-header");
+    header.createEl("h4", { text: "Sorting Settings" });
+    this.renderSortingControlsInternal(panel, false);
+  }
+  applySearchFilters(groups) {
+    return groups.map((group) => {
+      const filteredTodos = group.todos.filter((todo) => {
+        if (this.searchFilters.text && !todo.displayText.toLowerCase().includes(this.searchFilters.text.toLowerCase())) {
+          return false;
+        }
+        if (this.searchFilters.page && !todo.file.basename.toLowerCase().includes(this.searchFilters.page.toLowerCase())) {
+          return false;
+        }
+        if (this.searchFilters.priority && todo.priority !== this.searchFilters.priority) {
+          return false;
+        }
+        if (this.searchFilters.dueDateFrom || this.searchFilters.dueDateTo) {
+          if (!todo.dueDate)
+            return false;
+          if (this.searchFilters.dueDateFrom) {
+            const fromDate = (0, import_obsidian.moment)(this.searchFilters.dueDateFrom);
+            if (todo.dueDate.isBefore(fromDate, "day"))
+              return false;
+          }
+          if (this.searchFilters.dueDateTo) {
+            const toDate = (0, import_obsidian.moment)(this.searchFilters.dueDateTo);
+            if (todo.dueDate.isAfter(toDate, "day"))
+              return false;
+          }
+        }
+        if (this.searchFilters.hasLinks === true && todo.linkedNotes.length === 0) {
+          return false;
+        }
+        if (this.searchFilters.completed === true && !todo.completed) {
+          return false;
+        }
+        return true;
+      });
+      return {
+        ...group,
+        todos: filteredTodos
+      };
+    }).filter((group) => group.todos.length > 0);
+  }
+  showPrioritySelector(priorityEl, todo) {
+    const selector = priorityEl.parentElement.createEl("select", { cls: "todo-priority-selector-temp" });
+    const priorities = [
+      { value: "none", label: "No Priority" },
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" }
+    ];
+    priorities.forEach((p) => {
+      const option = selector.createEl("option", { value: p.value, text: p.label });
+      if (p.value === todo.priority)
+        option.selected = true;
+    });
+    priorityEl.style.display = "none";
+    selector.focus();
+    const handleSelection = async () => {
+      const newPriority = selector.value;
+      await this.plugin.updateTodoPriority(todo.id, newPriority);
+      selector.remove();
+      priorityEl.style.display = "";
+    };
+    const cleanup = () => {
+      selector.remove();
+      priorityEl.style.display = "";
+    };
+    selector.addEventListener("change", handleSelection);
+    selector.addEventListener("blur", cleanup);
+    selector.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        cleanup();
+      }
+    });
   }
   async openTodoFile(todo) {
     const { workspace } = this.app;
@@ -345,6 +753,11 @@ var DEFAULT_SETTINGS = {
   priorityFormat: "!%priority%",
   groupingCriteria: [
     { id: "primary", type: "page", enabled: true, order: 0 }
+  ],
+  sortingCriteria: [
+    { type: "priority", direction: "asc" },
+    { type: "dueDate", direction: "asc" },
+    { type: "line", direction: "asc" }
   ],
   hideCompletedTodos: false,
   hideBlankTodos: true,
@@ -640,35 +1053,56 @@ var TodoExtendedPlugin = class extends import_obsidian3.Plugin {
     return groups.sort((a, b) => a.name.localeCompare(b.name));
   }
   sortTodosWithHierarchy(todos) {
-    const byFile = /* @__PURE__ */ new Map();
-    for (const todo of todos) {
-      const fileKey = todo.file.path;
-      if (!byFile.has(fileKey)) {
-        byFile.set(fileKey, []);
+    return todos.sort((a, b) => {
+      for (const criterion of this.settings.sortingCriteria) {
+        const result = this.compareTodos(a, b, criterion);
+        if (result !== 0)
+          return result;
       }
-      byFile.get(fileKey).push(todo);
-    }
-    const result = [];
-    for (const fileTodos of byFile.values()) {
-      const sortedFileTodos = fileTodos.sort((a, b) => {
+      return 0;
+    });
+  }
+  compareTodos(a, b, criterion) {
+    var _a, _b;
+    let result = 0;
+    switch (criterion.type) {
+      case "priority":
         const priorityOrder = { "high": 0, "medium": 1, "low": 2, "none": 3 };
-        const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
-        if (priorityDiff !== 0)
-          return priorityDiff;
+        result = priorityOrder[a.priority] - priorityOrder[b.priority];
+        break;
+      case "dueDate":
         if (a.dueDate && b.dueDate) {
-          const dateDiff = a.dueDate.diff(b.dueDate);
-          if (dateDiff !== 0)
-            return dateDiff;
+          result = a.dueDate.diff(b.dueDate);
+        } else if (a.dueDate && !b.dueDate) {
+          result = -1;
+        } else if (!a.dueDate && b.dueDate) {
+          result = 1;
         }
-        if (a.dueDate && !b.dueDate)
-          return -1;
-        if (!a.dueDate && b.dueDate)
-          return 1;
-        return a.line - b.line;
-      });
-      result.push(...sortedFileTodos);
+        break;
+      case "fileName":
+        result = a.file.basename.localeCompare(b.file.basename);
+        break;
+      case "folderName":
+        const aFolder = ((_a = a.file.parent) == null ? void 0 : _a.path) || "";
+        const bFolder = ((_b = b.file.parent) == null ? void 0 : _b.path) || "";
+        result = aFolder.localeCompare(bFolder);
+        break;
+      case "text":
+        result = a.displayText.localeCompare(b.displayText);
+        break;
+      case "createdDate":
+        result = a.file.stat.ctime - b.file.stat.ctime;
+        break;
+      case "line":
+        const fileCompare = a.file.path.localeCompare(b.file.path);
+        if (fileCompare !== 0) {
+          result = fileCompare;
+        } else {
+          result = a.line - b.line;
+        }
+        break;
     }
-    return result;
+    return criterion.direction === "desc" ? -result : result;
   }
   extractTodosFromFile(file, content, cache) {
     const todos = [];
@@ -708,7 +1142,23 @@ var TodoExtendedPlugin = class extends import_obsidian3.Plugin {
   extractDueDate(text) {
     const dateFormat = this.settings.dateInputFormat;
     const dueDatePattern = this.settings.dueDateFormat.replace("%date%", `([^\\s]+)`);
-    const match = text.match(new RegExp(dueDatePattern));
+    let match = text.match(new RegExp(dueDatePattern));
+    if (match) {
+      const dateStr = match[1];
+      const parsedDate = (0, import_obsidian3.moment)(dateStr, dateFormat, true);
+      if (parsedDate.isValid()) {
+        return parsedDate;
+      }
+    }
+    match = text.match(/!due:([^\s]+)/i);
+    if (match) {
+      const dateStr = match[1];
+      const parsedDate = (0, import_obsidian3.moment)(dateStr, dateFormat, true);
+      if (parsedDate.isValid()) {
+        return parsedDate;
+      }
+    }
+    match = text.match(/due:([^\s]+)/i);
     if (match) {
       const dateStr = match[1];
       const parsedDate = (0, import_obsidian3.moment)(dateStr, dateFormat, true);
@@ -749,6 +1199,13 @@ var TodoExtendedPlugin = class extends import_obsidian3.Plugin {
     });
     displayText = displayText.replace(/!\[[^\]]*\]\([^)]+\)/g, "");
     displayText = displayText.replace(/!\[\[([^\]]+)\]\]/g, "");
+    const dueDatePattern = this.settings.dueDateFormat.replace("%date%", "[^\\s]+");
+    displayText = displayText.replace(new RegExp("\\s*" + dueDatePattern, "g"), "");
+    const priorityPattern = this.settings.priorityFormat.replace("%priority%", "(high|medium|low)");
+    displayText = displayText.replace(new RegExp("\\s*" + priorityPattern, "gi"), "");
+    displayText = displayText.replace(/\s*!due:[^\s]+/gi, "");
+    displayText = displayText.replace(/\s*due:[^\s]+/gi, "");
+    displayText = displayText.replace(/\s*!\s*$/, "");
     return displayText.trim();
   }
   extractImages(text) {

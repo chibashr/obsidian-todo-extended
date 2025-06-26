@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import TodoExtendedPlugin from '../main';
-import { GroupByOption, GroupingCriterion } from './types';
+import { GroupByOption, GroupingCriterion, SortingCriterion } from './types';
 
 export interface TodoExtendedSettings {
 	filterMostRecentDaily: boolean;
@@ -9,6 +9,7 @@ export interface TodoExtendedSettings {
 	dateInputFormat: string;
 	priorityFormat: string;
 	groupingCriteria: GroupingCriterion[];
+	sortingCriteria: SortingCriterion[];
 	hideCompletedTodos: boolean;
 	hideBlankTodos: boolean;
 	openInNewLeaf: boolean;
@@ -26,6 +27,11 @@ export const DEFAULT_SETTINGS: TodoExtendedSettings = {
 	priorityFormat: '!%priority%',
 	groupingCriteria: [
 		{ id: 'primary', type: 'page', enabled: true, order: 0 }
+	],
+	sortingCriteria: [
+		{ type: 'priority', direction: 'asc' },
+		{ type: 'dueDate', direction: 'asc' },
+		{ type: 'line', direction: 'asc' }
 	],
 	hideCompletedTodos: false,
 	hideBlankTodos: true,

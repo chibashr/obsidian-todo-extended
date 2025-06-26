@@ -32,4 +32,11 @@ export interface GroupingCriterion {
 	property?: string;
 	enabled: boolean;
 	order: number;
+}
+
+export type SortByOption = 'priority' | 'dueDate' | 'fileName' | 'folderName' | 'text' | 'createdDate' | 'line';
+
+export interface SortingCriterion {
+	type: SortByOption;
+	direction: 'asc' | 'desc';
 } 
